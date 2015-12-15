@@ -3,26 +3,31 @@ Name:		tuned
 Version:	2.5.1
 Release:	0.1
 License:	GPL v2+
+Group:		Daemons
 Source0:	https://fedorahosted.org/releases/t/u/tuned/%{name}-%{version}.tar.bz2
+# Source0-md5:	814d558f038558e21d9e48c9cac989ae
 URL:		https://fedorahosted.org/tuned/
 BuildRequires:	python
-BuildRequires:	systemd
-BuildArch:	noarch
+BuildRequires:	rpm-pythonprov
+BuildRequires:	rpmbuild(macros) >= 1.713
+BuildRequires:	systemd-devel
 Requires(post):	systemd, virt-what
 Requires(preun):	systemd
 Requires(postun):	systemd
-Requires:	python-decorator
-Requires:	dbus-python
-Requires:	pygobject3-base
-Requires:	python-pyudev
-Requires:	util-linux
-Requires:	python-perf
-Requires:	virt-what
-Requires:	python-configobj
 Requires:	ethtool
 Requires:	gawk
-Requires:	kernel-tools
 Requires:	hdparm
+Requires:	kernel-tools
+Requires:	pygobject3-base
+Requires:	python-configobj
+Requires:	python-dbus
+Requires:	python-decorator
+Requires:	python-perf
+Requires:	python-pyudev
+Requires:	util-linux
+Requires:	virt-what
+BuildArch:	noarch
+BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 %description
 The tuned package contains a daemon that tunes system settings
@@ -35,9 +40,9 @@ devices are implemented.
 %package gtk
 Summary:	GTK GUI for tuned
 Requires:	%{name} = %{version}-%{release}
+Requires:	polkit
 Requires:	powertop
 Requires:	pygobject3-base
-Requires:	polkit
 
 %description gtk
 GTK GUI that can control tuned and provide simple profile editor.
@@ -121,13 +126,14 @@ scenarios.
 %prep
 %setup -q
 
-
 %build
-
 
 %install
 rm -rf $RPM_BUILD_ROOT
-%{__make} install DESTDIR=$RPM_BUILD_ROOT DOCDIR=%{docdir}
+%{__make} install \
+	DOCDIR=%{_docdir} \
+	DESTDIR=$RPM_BUILD_ROOT
+
 %if 0%{?rhel}
 sed -i 's/\(dynamic_tuning[ \t]*=[ \t]*\).*/\10/' $RPM_BUILD_ROOT%{_sysconfdir}/tuned/tuned-main.conf
 %endif
@@ -148,10 +154,11 @@ sed -i 's|.*/\([^/]\+\)/[^\.]\+\.conf|\1|' %{_sysconfdir}/tuned/active_profile
 sed -i 's/GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX \\$tuned_params"/GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT \\$tuned_params"/' \
   %{_sysconfdir}/default/grub
 
+%clean
+rm -rf $RPM_BUILD_ROOT
 
 %preun
 %systemd_preun tuned.service
-
 
 %postun
 %systemd_postun_with_restart tuned.service
@@ -159,31 +166,28 @@ sed -i 's/GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX \\$tuned_params"/GRUB_CMDLINE_
 # conditional support for grub2, grub2 is not available on all architectures
 # and tuned is noarch package, thus the following hack is needed
 if [ "$1" == 0 ]; then
-  rm -f %{_sysconfdir}/grub.d/00_tuned || :
-# unpatch /etc/default/grub
-  sed -i '/GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT \\$tuned_params"/d' %{_sysconfdir}/default/grub
+	rm -f %{_sysconfdir}/grub.d/00_tuned || :
+	# unpatch /etc/default/grub
+	sed -i '/GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT \\$tuned_params"/d' %{_sysconfdir}/default/grub
 fi
-
 
 %triggerun -- tuned < 2.0-0
 # remove ktune from old tuned, now part of tuned
-/usr%service ktune stop &>/dev/null || :
-/usr/sbin/chkconfig --del ktune &>/dev/null || :
-
+%service ktune stop
+/usr/sbin/chkconfig --del ktune
 
 %posttrans
 # conditional support for grub2, grub2 is not available on all architectures
 # and tuned is noarch package, thus the following hack is needed
 if [ -d %{_sysconfdir}/grub.d ]; then
-  cp -a %{_datadir}/tuned/grub2/00_tuned %{_sysconfdir}/grub.d/00_tuned
+	cp -a %{_datadir}/tuned/grub2/00_tuned %{_sysconfdir}/grub.d/00_tuned
 fi
-
 
 %files
 %defattr(644,root,root,755)
-%exclude %{docdir}/README.utils
-%exclude %{docdir}/README.scomes
-%doc %{docdir}
+%exclude %{_docdir}/README.utils
+%exclude %{_docdir}/README.scomes
+%doc %{_docdir}
 %{bash_compdir}/tuned-adm
 %exclude %{py_sitescriptdir}/tuned/gtk
 %{py_sitescriptdir}/tuned
@@ -297,6 +301,3 @@ fi
 %{_prefix}/lib/tuned/enterprise-storage
 %{_prefix}/lib/tuned/spindown-disk
 %{_mandir}/man7/tuned-profiles-compat.7*
-
-%clean
-rm -rf $RPM_BUILD_ROOT
